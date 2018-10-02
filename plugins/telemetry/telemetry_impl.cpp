@@ -367,7 +367,8 @@ void TelemetryImpl::process_global_position_int(const mavlink_message_t &message
     set_position(Telemetry::Position({global_position_int.lat * 1e-7,
                                       global_position_int.lon * 1e-7,
                                       global_position_int.alt * 1e-3f,
-                                      global_position_int.relative_alt * 1e-3f}));
+                                      global_position_int.relative_alt * 1e-3f,
+                                      global_position_int.hdg != UINT16_MAX ? global_position_int.hdg * 1e-2f : NAN}));
     set_ground_speed_ned({global_position_int.vx * 1e-2f,
                           global_position_int.vy * 1e-2f,
                           global_position_int.vz * 1e-2f});

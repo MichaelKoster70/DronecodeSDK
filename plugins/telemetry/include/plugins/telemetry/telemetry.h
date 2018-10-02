@@ -41,6 +41,8 @@ public:
         double longitude_deg; /**< @brief Longitude in degrees (range: -180 to 180) */
         float absolute_altitude_m; /**< @brief Altitude AMSL (above mean sea level) in metres */
         float relative_altitude_m; /**< @brief Altitude relative to takeoff altitude in metres */
+        float heading; /**< @brief Vehicle heading (yaw angle) in degrees (range: 0.0 to 359.99
+                          degrees). */
     };
 
     /**

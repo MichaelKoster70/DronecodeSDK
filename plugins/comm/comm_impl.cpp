@@ -16,13 +16,7 @@ CommImpl::~CommImpl()
     _parent->unregister_plugin(this);
 }
 
-void CommImpl::init()
-{
-   //using namespace std::placeholders; // for `_1`
-
-   //_parent->register_mavlink_message_handler(
-   //    MAVLINK_MSG_ID_HEARTBEAT, std::bind(&StatusTextImpl::process_heartbeat, this, _1), this);
-}
+void CommImpl::init() { }
 
 void CommImpl::deinit()
 {
@@ -74,7 +68,7 @@ bool CommImpl::stop_stream(uint8_t req_stream_id)
 
 void CommImpl::send_statustext(const std::string &messageText) const
 {
-    std::string buffer;
+    std::string buffer = messageText;
     buffer.resize(50);
 
     mavlink_message_t message;

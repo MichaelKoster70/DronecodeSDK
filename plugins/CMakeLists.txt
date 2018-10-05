@@ -20,5 +20,6 @@ add_subdirectory(log_files)
 add_subdirectory(mission)
 add_subdirectory(offboard)
 add_subdirectory(telemetry)
+add_subdirectory(comm)
 
 set(UNIT_TEST_SOURCES ${UNIT_TEST_SOURCES} PARENT_SCOPE)

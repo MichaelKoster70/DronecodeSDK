@@ -9,3 +9,4 @@ logs/
 *.files
 *.includes
 CMakeLists.txt.user*
+/.vs

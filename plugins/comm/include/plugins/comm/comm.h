@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <functional>
 #include "plugin_base.h"
 
 namespace dronecode_sdk {
@@ -12,9 +13,9 @@ class CommImpl;
 
 /**
  * @brief The Comm class provides the ability to
-* - send statustext messages to the connected vecicle.
-* - set parameter values
-* - start/stop data streams
+ * - send statustext messages to the connected vecicle.
+ * - set parameter values
+ * - start/stop data streams
  */
 class Comm : public PluginBase {
 public:
@@ -45,8 +46,8 @@ public:
      */
     bool set_param_int(const std::string &name, int32_t value);
 
-     /**
-     * @brief Request a given data stream from the connected system 
+    /**
+     * @brief Request a given data stream from the connected system
      * using the MAVLINK REQUEST_DATA_STREAM message.
      *
      * @param req_stream_id The stream ID to start (one of the MAV_DATA_STREAM values)
@@ -62,6 +63,23 @@ public:
      * @return bool true if successfull, else false
      */
     bool stop_stream(uint8_t req_stream_id);
+
+    /**
+     * @brief Callback type to receive mission progress.
+     *
+     * The mission is finished if current == total.
+     *
+     * @param current Current mission item index (0 based).
+     * @param total Total number of mission items.
+     */
+    typedef std::function<void(int current, int total)> progress_callback_t;
+
+    /**
+     * @brief Subscribes to mission progress (asynchronous).
+     *
+     * @param callback Callback to receive mission progress.
+     */
+    void subscribe_mission_progress(progress_callback_t callback);
 
     /**
      * @brief Sends a status text message.

@@ -22,6 +22,11 @@ bool Comm::stop_stream(uint8_t req_stream_id)
     return _impl->stop_stream(req_stream_id);
 }
 
+void Comm::subscribe_mission_progress(Comm::progress_callback_t callback)
+{
+    _impl->subscribe_mission_progress(callback);
+}
+
 void Comm::send_statustext(const std::string &messageText) const
 {
     _impl->send_statustext(messageText);

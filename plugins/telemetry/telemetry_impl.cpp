@@ -8,47 +8,7 @@
 
 namespace dronecode_sdk {
 
-TelemetryImpl::TelemetryImpl(System &system) :
-    PluginImplBase(system),
-    _position_mutex(),
-    _position(Telemetry::Position{double(NAN), double(NAN), NAN, NAN}),
-    _home_position_mutex(),
-    _home_position(Telemetry::Position{double(NAN), double(NAN), NAN, NAN}),
-    _in_air(false),
-    _armed(false),
-    _attitude_quaternion_mutex(),
-    _attitude_quaternion(Telemetry::Quaternion{NAN, NAN, NAN, NAN}),
-    _camera_attitude_euler_angle_mutex(),
-    _camera_attitude_euler_angle(Telemetry::EulerAngle{NAN, NAN, NAN}),
-    _ground_speed_ned_mutex(),
-    _ground_speed_ned(Telemetry::GroundSpeedNED{NAN, NAN, NAN}),
-    _gps_info_mutex(),
-    _gps_info(Telemetry::GPSInfo{0, 0}),
-    _battery_mutex(),
-    _battery(Telemetry::Battery{NAN, NAN}),
-    _flight_mode_mutex(),
-    _flight_mode(Telemetry::FlightMode::UNKNOWN),
-    _health_mutex(),
-    _health(Telemetry::Health{false, false, false, false, false, false, false}),
-    _rc_status_mutex(),
-    _rc_status(Telemetry::RCStatus{false, false, 0.0f}),
-    _position_subscription(nullptr),
-    _home_position_subscription(nullptr),
-    _in_air_subscription(nullptr),
-    _armed_subscription(nullptr),
-    _attitude_quaternion_subscription(nullptr),
-    _attitude_euler_angle_subscription(nullptr),
-    _camera_attitude_quaternion_subscription(nullptr),
-    _camera_attitude_euler_angle_subscription(nullptr),
-    _ground_speed_ned_subscription(nullptr),
-    _gps_info_subscription(nullptr),
-    _battery_subscription(nullptr),
-    _flight_mode_subscription(nullptr),
-    _health_subscription(nullptr),
-    _health_all_ok_subscription(nullptr),
-    _rc_status_subscription(nullptr),
-    _ground_speed_ned_rate_hz(0.0),
-    _position_rate_hz(-1.0)
+TelemetryImpl::TelemetryImpl(System &system) : PluginImplBase(system)
 {
     _parent->register_plugin(this);
 }
@@ -569,9 +529,9 @@ Telemetry::FlightMode TelemetryImpl::to_flight_mode_from_custom_mode(uint32_t cu
     }
 }
 
-void TelemetryImpl::receive_param_cal_gyro(bool success, int value)
+void TelemetryImpl::receive_param_cal_gyro(MAVLinkParameters::Result result, int value)
 {
-    if (!success) {
+    if (result != MAVLinkParameters::Result::SUCCESS) {
         LogErr() << "Error: Param for gyro cal failed.";
         return;
     }
@@ -580,9 +540,9 @@ void TelemetryImpl::receive_param_cal_gyro(bool success, int value)
     set_health_gyrometer_calibration(ok);
 }
 
-void TelemetryImpl::receive_param_cal_accel(bool success, int value)
+void TelemetryImpl::receive_param_cal_accel(MAVLinkParameters::Result result, int value)
 {
-    if (!success) {
+    if (result != MAVLinkParameters::Result::SUCCESS) {
         LogErr() << "Error: Param for accel cal failed.";
         return;
     }
@@ -591,9 +551,9 @@ void TelemetryImpl::receive_param_cal_accel(bool success, int value)
     set_health_accelerometer_calibration(ok);
 }
 
-void TelemetryImpl::receive_param_cal_mag(bool success, int value)
+void TelemetryImpl::receive_param_cal_mag(MAVLinkParameters::Result result, int value)
 {
-    if (!success) {
+    if (result != MAVLinkParameters::Result::SUCCESS) {
         LogErr() << "Error: Param for mag cal failed.";
         return;
     }
@@ -603,9 +563,9 @@ void TelemetryImpl::receive_param_cal_mag(bool success, int value)
 }
 
 #ifdef LEVEL_CALIBRATION
-void TelemetryImpl::receive_param_cal_level(bool success, float value)
+void TelemetryImpl::receive_param_cal_level(MAVLinkParameters::Result result, float value)
 {
-    if (!success) {
+    if (result != MAVLinkParameters::Result::SUCCESS) {
         LogErr() << "Error: Param for level cal failed.";
         return;
     }
@@ -615,9 +575,9 @@ void TelemetryImpl::receive_param_cal_level(bool success, float value)
 }
 #endif
 
-void TelemetryImpl::receive_param_hitl(bool success, int value)
+void TelemetryImpl::receive_param_hitl(MAVLinkParameters::Result result, int value)
 {
-    if (!success) {
+    if (result != MAVLinkParameters::Result::SUCCESS) {
         LogErr() << "Error: Param to determine hitl failed.";
         return;
     }

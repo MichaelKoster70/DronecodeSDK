@@ -33,24 +33,31 @@ public:
                                  const rpc::mission::DownloadMissionRequest * /* request */,
                                  rpc::mission::DownloadMissionResponse *response) override
     {
+        std::promise<void> result_promise;
+        const auto result_future = result_promise.get_future();
+
         _mission.download_mission_async(
-            [this, response](const dronecode_sdk::Mission::Result result,
-                             const std::vector<std::shared_ptr<MissionItem>> mission_items) {
+            [this, response, &result_promise](
+                const dronecode_sdk::Mission::Result result,
+                const std::vector<std::shared_ptr<MissionItem>> mission_items) {
                 if (response != nullptr) {
                     auto rpc_mission_result = generateRPCMissionResult(result);
                     response->set_allocated_mission_result(rpc_mission_result);
 
-                    auto rpc_mission = new rpc::mission::Mission();
+                    auto rpc_mission = new rpc::mission::MissionItems();
 
                     for (const auto mission_item : mission_items) {
-                        auto rpc_mission_item = rpc_mission->add_mission_item();
+                        auto rpc_mission_item = rpc_mission->add_mission_items();
                         translateMissionItem(mission_item, rpc_mission_item);
                     }
 
-                    response->set_allocated_mission(rpc_mission);
+                    response->set_allocated_mission_items(rpc_mission);
                 }
+
+                result_promise.set_value();
             });
 
+        result_future.wait();
         return grpc::Status::OK;
     }
 
@@ -166,10 +173,10 @@ public:
         std::promise<void> stream_closed_promise;
         auto stream_closed_future = stream_closed_promise.get_future();
 
-        bool is_finished = false;
+        auto is_finished = std::make_shared<bool>(false);
 
         _mission.subscribe_progress(
-            [&writer, &stream_closed_promise, &is_finished](int current, int total) {
+            [this, &writer, &stream_closed_promise, is_finished](int current, int total) {
                 dronecode_sdk::rpc::mission::MissionProgressResponse rpc_mission_progress_response;
 
                 auto rpc_mission_progress =
@@ -181,8 +188,9 @@ public:
                 rpc_mission_progress_response.set_allocated_mission_progress(
                     rpc_mission_progress.release());
 
-                if (!writer->Write(rpc_mission_progress_response) && !is_finished) {
-                    is_finished = true;
+                if (!*is_finished && !writer->Write(rpc_mission_progress_response)) {
+                    _mission.subscribe_progress(nullptr);
+                    *is_finished = true;
                     stream_closed_promise.set_value();
                 }
             });
@@ -296,7 +304,7 @@ private:
         std::vector<std::shared_ptr<MissionItem>> mission_items;
 
         if (request != nullptr) {
-            for (auto rpc_mission_item : request->mission().mission_item()) {
+            for (auto rpc_mission_item : request->mission_items().mission_items()) {
                 mission_items.push_back(translateRPCMissionItem(rpc_mission_item));
             }
         }

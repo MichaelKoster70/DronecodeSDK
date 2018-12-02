@@ -40,56 +40,63 @@ public:
         return rpc_progress_data;
     }
 
-    grpc::Status
-    CalibrateGyro(grpc::ServerContext * /* context */,
-                  const rpc::calibration::CalibrateGyroRequest request,
-                  grpc::ServerWriter<rpc::calibration::CalibrateGyroResponse> *writer) override
+    grpc::Status SubscribeCalibrateGyro(
+        grpc::ServerContext * /* context */,
+        const rpc::calibration::SubscribeCalibrateGyroRequest *request,
+        grpc::ServerWriter<rpc::calibration::CalibrateGyroResponse> *writer) override
     {
         std::promise<void> stream_closed_promise;
         auto stream_closed_future = stream_closed_promise.get_future();
 
-        bool is_finished = false;
+        auto is_finished = std::make_shared<bool>(false);
 
-        _calibration.calibrate_gyro_async([this, &writer, &stream_closed_promise, &is_finished](
-                                              const dronecode_sdk::Calibration::Result result,
-                                              const float progress,
-                                              const std::string &status_text) {
-            rpc::calibration::CalibrateGyroResponse rpc_response;
-            rpc_response.set_allocated_calibration_result(translateCalibrationResult(result).get());
+        _calibration.calibrate_gyro_async(
+            [this, &writer, &stream_closed_promise, is_finished](
+                const dronecode_sdk::Calibration::Result result,
+                const dronecode_sdk::Calibration::ProgressData progress_data) {
+                rpc::calibration::CalibrateGyroResponse rpc_response;
+                rpc_response.set_allocated_calibration_result(
+                    translateCalibrationResult(result).release());
+                rpc_response.set_allocated_progress_data(
+                    translateProgressData(progress_data).release());
 
-            std::lock_guard<std::mutex> lock(_subscribe_mutex);
-            if (!writer->Write(rpc_response) && !is_finished) {
-                is_finished = true;
-                stream_closed_promise.set_value();
-            }
-        });
+                std::lock_guard<std::mutex> lock(_subscribe_mutex);
+                if (!*is_finished && !writer->Write(rpc_response)) {
+                    _calibration.calibrate_gyro_async(nullptr);
+                    *is_finished = true;
+                    stream_closed_promise.set_value();
+                }
+            });
 
         stream_closed_future.wait();
         return grpc::Status::OK;
     }
 
-    grpc::Status CalibrateAccelerometer(
+    grpc::Status SubscribeCalibrateAccelerometer(
         grpc::ServerContext * /* context */,
-        const rpc::calibration::CalibrateAccelerometerRequest request,
+        const rpc::calibration::SubscribeCalibrateAccelerometerRequest *request,
         grpc::ServerWriter<rpc::calibration::CalibrateAccelerometerResponse> *writer) override
     {
         std::promise<void> stream_closed_promise;
         auto stream_closed_future = stream_closed_promise.get_future();
 
-        bool is_finished = false;
+        auto is_finished = std::make_shared<bool>(false);
 
         _calibration.calibrate_accelerometer_async(
-            [this, &writer, &stream_closed_promise, &is_finished](
+            [this, &writer, &stream_closed_promise, is_finished](
                 const dronecode_sdk::Calibration::Result result,
-                const float progress,
-                const std::string &status_text) {
+                const dronecode_sdk::Calibration::ProgressData progress_data) {
                 rpc::calibration::CalibrateAccelerometerResponse rpc_response;
                 rpc_response.set_allocated_calibration_result(
-                    translateCalibrationResult(result).get());
+                    translateCalibrationResult(result).release());
+                rpc_response.set_allocated_progress_data(
+                    translateProgressData(progress_data).release());
 
                 std::lock_guard<std::mutex> lock(_subscribe_mutex);
-                if (!writer->Write(rpc_response) && !is_finished) {
-                    is_finished = true;
+
+                if (!*is_finished && !writer->Write(rpc_response)) {
+                    _calibration.calibrate_accelerometer_async(nullptr);
+                    *is_finished = true;
                     stream_closed_promise.set_value();
                 }
             });
@@ -98,28 +105,30 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status CalibrateMagnetometer(
+    grpc::Status SubscribeCalibrateMagnetometer(
         grpc::ServerContext * /* context */,
-        const rpc::calibration::CalibrateMagnetometerRequest request,
+        const rpc::calibration::SubscribeCalibrateMagnetometerRequest *request,
         grpc::ServerWriter<rpc::calibration::CalibrateMagnetometerResponse> *writer) override
     {
         std::promise<void> stream_closed_promise;
         auto stream_closed_future = stream_closed_promise.get_future();
 
-        bool is_finished = false;
+        auto is_finished = std::make_shared<bool>(false);
 
         _calibration.calibrate_magnetometer_async(
-            [this, &writer, &stream_closed_promise, &is_finished](
+            [this, &writer, &stream_closed_promise, is_finished](
                 const dronecode_sdk::Calibration::Result result,
-                const float progress,
-                const std::string &status_text) {
+                const dronecode_sdk::Calibration::ProgressData progress_data) {
                 rpc::calibration::CalibrateMagnetometerResponse rpc_response;
                 rpc_response.set_allocated_calibration_result(
-                    translateCalibrationResult(result).get());
+                    translateCalibrationResult(result).release());
+                rpc_response.set_allocated_progress_data(
+                    translateProgressData(progress_data).release());
 
                 std::lock_guard<std::mutex> lock(_subscribe_mutex);
-                if (!writer->Write(rpc_response) && !is_finished) {
-                    is_finished = true;
+                if (!*is_finished && !writer->Write(rpc_response)) {
+                    _calibration.calibrate_magnetometer_async(nullptr);
+                    *is_finished = true;
                     stream_closed_promise.set_value();
                 }
             });
@@ -128,28 +137,30 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status CalibrateGimbalAccelerometer(
+    grpc::Status SubscribeCalibrateGimbalAccelerometer(
         grpc::ServerContext * /* context */,
-        const rpc::calibration::CalibrateGimbalAccelerometerRequest request,
+        const rpc::calibration::SubscribeCalibrateGimbalAccelerometerRequest *request,
         grpc::ServerWriter<rpc::calibration::CalibrateGimbalAccelerometerResponse> *writer) override
     {
         std::promise<void> stream_closed_promise;
         auto stream_closed_future = stream_closed_promise.get_future();
 
-        bool is_finished = false;
+        auto is_finished = std::make_shared<bool>(false);
 
         _calibration.calibrate_gimbal_accelerometer_async(
-            [this, &writer, &stream_closed_promise, &is_finished](
+            [this, &writer, &stream_closed_promise, is_finished](
                 const dronecode_sdk::Calibration::Result result,
-                const float progress,
-                const std::string &status_text) {
+                const dronecode_sdk::Calibration::ProgressData progress_data) {
                 rpc::calibration::CalibrateGimbalAccelerometerResponse rpc_response;
                 rpc_response.set_allocated_calibration_result(
-                    translateCalibrationResult(result).get());
+                    translateCalibrationResult(result).release());
+                rpc_response.set_allocated_progress_data(
+                    translateProgressData(progress_data).release());
 
                 std::lock_guard<std::mutex> lock(_subscribe_mutex);
-                if (!writer->Write(rpc_response) && !is_finished) {
-                    is_finished = true;
+                if (!*is_finished && !writer->Write(rpc_response)) {
+                    _calibration.calibrate_gimbal_accelerometer_async(nullptr);
+                    *is_finished = true;
                     stream_closed_promise.set_value();
                 }
             });

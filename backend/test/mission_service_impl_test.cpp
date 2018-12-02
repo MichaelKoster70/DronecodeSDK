@@ -17,6 +17,7 @@ namespace dc = dronecode_sdk;
 namespace rpc = dronecode_sdk::rpc::mission;
 
 using testing::_;
+using testing::DoDefault;
 using testing::NiceMock;
 using testing::Return;
 
@@ -134,21 +135,21 @@ protected:
     }
 
     /* The mocked mission module. */
-    MockMission _mission;
+    MockMission _mission{};
 
     /* The mission service that is actually being tested here. */
     MissionServiceImpl _mission_service;
 
     /* The mission returns its result through a callback, which is saved in _result_callback. */
-    dc::Mission::result_callback_t _result_callback;
+    dc::Mission::result_callback_t _result_callback{};
 
     /* The tests need to make sure that _result_callback has been set before calling it, hence the
      * promise. */
-    std::promise<void> _callback_saved_promise;
+    std::promise<void> _callback_saved_promise{};
 
     /* The tests need to make sure that _result_callback has been set before calling it, hence the
      * future. */
-    std::future<void> _callback_saved_future;
+    std::future<void> _callback_saved_future{};
 };
 
 class MissionServiceImplUploadTest : public MissionServiceImplTestBase {
@@ -173,7 +174,7 @@ protected:
     checkItemsAreUploadedCorrectly(std::vector<std::shared_ptr<dc::MissionItem>> &mission_items);
 
     /* Captures the actual mission sent to dronecode_sdk by the backend. */
-    std::vector<std::shared_ptr<dc::MissionItem>> _uploaded_mission;
+    std::vector<std::shared_ptr<dc::MissionItem>> _uploaded_mission{};
 };
 
 INSTANTIATE_TEST_CASE_P(MissionResultCorrespondences,
@@ -226,14 +227,14 @@ std::shared_ptr<UploadMissionRequest> MissionServiceImplUploadTest::generateUplo
     const std::vector<std::shared_ptr<dc::MissionItem>> &mission_items) const
 {
     auto request = std::make_shared<UploadMissionRequest>();
-    auto rpc_mission = new dc::rpc::mission::Mission();
+    auto rpc_mission = new dc::rpc::mission::MissionItems();
 
     for (const auto &mission_item : mission_items) {
-        auto rpc_mission_item = rpc_mission->add_mission_item();
+        auto rpc_mission_item = rpc_mission->add_mission_items();
         MissionServiceImpl::translateMissionItem(mission_item, rpc_mission_item);
     }
 
-    request->set_allocated_mission(rpc_mission);
+    request->set_allocated_mission_items(rpc_mission);
 
     return request;
 }
@@ -283,7 +284,7 @@ protected:
     void
     checkItemsAreDownloadedCorrectly(std::vector<std::shared_ptr<dc::MissionItem>> &mission_items);
 
-    dc::Mission::mission_items_and_result_callback_t _download_callback;
+    dc::Mission::mission_items_and_result_callback_t _download_callback{};
 };
 
 INSTANTIATE_TEST_CASE_P(MissionResultCorrespondences,
@@ -346,12 +347,12 @@ void MissionServiceImplDownloadTest::checkItemsAreDownloadedCorrectly(
     _download_callback(ARBITRARY_RESULT, mission_items);
     download_handle.wait();
 
-    ASSERT_EQ(mission_items.size(), response->mission().mission_item().size());
+    ASSERT_EQ(mission_items.size(), response->mission_items().mission_items().size());
 
     for (size_t i = 0; i < mission_items.size(); i++) {
         EXPECT_EQ(*mission_items.at(i),
                   *MissionServiceImpl::translateRPCMissionItem(
-                      response->mission().mission_item().Get(i)));
+                      response->mission_items().mission_items().Get(i)));
     }
 }
 
@@ -585,8 +586,8 @@ protected:
     subscribeMissionProgressAsync(std::vector<std::pair<int, int>> &progress_events,
                                   std::shared_ptr<grpc::ClientContext> context) const;
 
-    std::unique_ptr<grpc::Server> _server;
-    std::unique_ptr<MissionService::Stub> _stub;
+    std::unique_ptr<grpc::Server> _server{};
+    std::unique_ptr<MissionService::Stub> _stub{};
 };
 
 TEST_F(MissionServiceImplProgressTest, registersToMissionProgress)
@@ -594,7 +595,9 @@ TEST_F(MissionServiceImplProgressTest, registersToMissionProgress)
     dc::Mission::progress_callback_t progress_callback;
     auto context = std::make_shared<grpc::ClientContext>();
     EXPECT_CALL(_mission, subscribe_progress(_))
-        .WillOnce(SaveResult(&progress_callback, &_callback_saved_promise));
+        .Times(2)
+        .WillOnce(SaveResult(&progress_callback, &_callback_saved_promise))
+        .WillOnce(DoDefault());
     std::vector<std::pair<int, int>> progress_events;
 
     auto progress_events_future = subscribeMissionProgressAsync(progress_events, context);
@@ -629,7 +632,9 @@ TEST_F(MissionServiceImplProgressTest, SendsMultipleMissionProgressEvents)
 {
     dc::Mission::progress_callback_t progress_callback;
     EXPECT_CALL(_mission, subscribe_progress(_))
-        .WillOnce(SaveResult(&progress_callback, &_callback_saved_promise));
+        .Times(2)
+        .WillOnce(SaveResult(&progress_callback, &_callback_saved_promise))
+        .WillOnce(DoDefault());
 
     auto expected_mission_count = ARBITRARY_SMALL_INT;
     std::vector<std::pair<int, int>> expected_progress_events;

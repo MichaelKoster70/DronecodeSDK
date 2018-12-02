@@ -39,9 +39,9 @@ private:
     static Calibration::Result
     calibration_result_from_command_result(MAVLinkCommands::Result result);
 
-    void receive_param_cal_gyro(bool success, int value);
-    void receive_param_cal_accel(bool success, int value);
-    void receive_param_cal_mag(bool success, int value);
+    void receive_param_cal_gyro(MAVLinkParameters::Result result, int value);
+    void receive_param_cal_accel(MAVLinkParameters::Result result, int value);
+    void receive_param_cal_mag(MAVLinkParameters::Result result, int value);
 
     void set_gyro_calibration(bool ok);
     void set_accelerometer_calibration(bool ok);
@@ -73,7 +73,7 @@ private:
         ACCELEROMETER_CALIBRATION,
         MAGNETOMETER_CALIBRATION,
         GIMBAL_ACCELEROMETER_CALIBRATION
-    } _state;
+    } _state{State::NONE};
 
     Calibration::calibration_callback_t _calibration_callback{nullptr};
 };

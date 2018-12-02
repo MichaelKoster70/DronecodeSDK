@@ -23,26 +23,6 @@ CameraImpl::CameraImpl(System &system) : PluginImplBase(system)
 CameraImpl::~CameraImpl()
 {
     _parent->unregister_plugin(this);
-
-    {
-        std::lock_guard<std::mutex> lock(_status.mutex);
-        _status.callback = nullptr;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(_get_mode.mutex);
-        _get_mode.callback = nullptr;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(_capture_info.mutex);
-        _capture_info.callback = nullptr;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(_video_stream_info.mutex);
-        _video_stream_info.callback = nullptr;
-    }
 }
 
 void CameraImpl::init()
@@ -81,22 +61,42 @@ void CameraImpl::init()
         MAVLINK_MSG_ID_FLIGHT_INFORMATION,
         std::bind(&CameraImpl::process_flight_information, this, _1),
         this);
-
-    auto command_camera_info = make_command_request_camera_info();
-
-    _parent->send_command_async(command_camera_info, nullptr);
 }
 
 void CameraImpl::deinit()
 {
     _parent->remove_call_every(_status.call_every_cookie);
     _parent->unregister_all_mavlink_message_handlers(this);
+
+    {
+        std::lock_guard<std::mutex> lock(_status.mutex);
+        _status.callback = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_get_mode.mutex);
+        _get_mode.callback = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_capture_info.mutex);
+        _capture_info.callback = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_video_stream_info.mutex);
+        _video_stream_info.callback = nullptr;
+    }
 }
 
 void CameraImpl::enable()
 {
     refresh_params();
     request_flight_information();
+
+    auto command_camera_info = make_command_request_camera_info();
+    _parent->send_command_async(command_camera_info, nullptr);
+
     _parent->add_call_every(
         [this]() { request_flight_information(); }, 10.0, &_flight_information_call_every_cookie);
 }
@@ -630,7 +630,7 @@ void CameraImpl::get_status_async(Camera::get_status_callback_t callback)
         if (_status.callback != nullptr) {
             if (callback) {
                 Camera::Status empty_status = {};
-                callback(Camera::Result::IN_PROGRESS, empty_status);
+                callback(Camera::Result::BUSY, empty_status);
                 return;
             }
         }
@@ -782,10 +782,15 @@ CameraImpl::to_euler_angle_from_quaternion(Camera::CaptureInfo::Quaternion quate
 
 void CameraImpl::notify_capture_info(Camera::CaptureInfo capture_info)
 {
-    if (_capture_info.callback) {
-        _parent->call_user_callback(
-            [this, capture_info]() { _capture_info.callback(capture_info); });
+    // Make a copy because it is passed to the thread pool
+    const auto capture_info_callback = _capture_info.callback;
+
+    if (capture_info_callback == nullptr) {
+        return;
     }
+
+    _parent->call_user_callback(
+        [capture_info, capture_info_callback]() { capture_info_callback(capture_info); });
 }
 
 void CameraImpl::process_camera_settings(const mavlink_message_t &message)
@@ -953,9 +958,14 @@ void CameraImpl::check_status()
 
 void CameraImpl::notify_status(Camera::Status status)
 {
-    if (_subscribe_status_callback) {
-        _parent->call_user_callback([this, status]() { _subscribe_status_callback(status); });
+    // Make a copy because it is passed to the thread pool
+    const auto status_callback = _subscribe_status_callback;
+
+    if (status_callback == nullptr) {
+        return;
     }
+
+    _parent->call_user_callback([status, status_callback]() { status_callback(status); });
 }
 
 void CameraImpl::status_timeout_happened()
@@ -1030,9 +1040,14 @@ void CameraImpl::receive_set_mode_command_result(const MAVLinkCommands::Result c
 
 void CameraImpl::notify_mode(const Camera::Mode mode)
 {
-    if (_subscribe_mode_callback) {
-        _parent->call_user_callback([this, mode]() { _subscribe_mode_callback(mode); });
+    // Make a copy because it is passed to the thread pool
+    const auto mode_callback = _subscribe_mode_callback;
+
+    if (mode_callback == nullptr) {
+        return;
     }
+
+    _parent->call_user_callback([mode, mode_callback]() { mode_callback(mode); });
 }
 
 void CameraImpl::receive_get_mode_command_result(MAVLinkCommands::Result command_result)
@@ -1042,7 +1057,7 @@ void CameraImpl::receive_get_mode_command_result(MAVLinkCommands::Result command
     std::lock_guard<std::mutex> lock(_get_mode.mutex);
 
     if (camera_result == Camera::Result::SUCCESS) {
-        // SUCESS is the normal case and means we keep waiting to receive the mode.
+        // SUCCESS is the normal case and means we keep waiting to receive the mode.
         _parent->refresh_timeout_handler(_get_mode.timeout_cookie);
         return;
     } else {
@@ -1118,7 +1133,7 @@ bool CameraImpl::get_possible_options(const std::string &setting_id,
     for (const auto &value : values) {
         std::stringstream ss{};
         ss << value;
-        Camera::Option option;
+        Camera::Option option{};
         option.option_id = ss.str();
         get_option_str(setting_id, option.option_id, option.option_description);
         options.push_back(option);
@@ -1166,8 +1181,8 @@ void CameraImpl::set_option_async(const std::string &setting_id,
 
     _parent->set_param_async(setting_id,
                              value,
-                             [this, callback, setting_id, value](bool success) {
-                                 if (success) {
+                             [this, callback, setting_id, value](MAVLinkParameters::Result result) {
+                                 if (result == MAVLinkParameters::Result::SUCCESS) {
                                      if (this->_camera_definition) {
                                          _camera_definition->set_setting(setting_id, value);
                                          refresh_params();
@@ -1229,25 +1244,11 @@ void CameraImpl::get_option_async(const std::string &setting_id,
         }
     } else {
         // If this still happens, we request the param, but also complain.
-        LogWarn() << "The param was probably outdated, trying to fetch it";
-        _parent->get_param_async(
-            setting_id,
-            [setting_id, this](bool success, MAVLinkParameters::ParamValue value_gotten) {
-                if (!success) {
-                    LogWarn() << "Fetching the param failed";
-                    return;
-                }
-                // We need to check again by the time this callback runs
-                if (!this->_camera_definition) {
-                    return;
-                }
-                this->_camera_definition->set_setting(setting_id, value_gotten);
-            },
-            true);
-
-        // At this point it might be a good idea to refresh but it's a bit scary
-        // as the stack keeps growing at this point.
-        // refresh_params();
+        LogWarn() << "Setting '" << setting_id << "' not found.";
+        if (callback) {
+            Camera::Option no_option{};
+            callback(Camera::Result::ERROR, no_option);
+        }
     }
 }
 
@@ -1287,7 +1288,7 @@ void CameraImpl::notify_current_settings()
         // use the cache for this, presumably we updated it right before.
         MAVLinkParameters::ParamValue value;
         if (_camera_definition->get_setting(possible_setting, value)) {
-            Camera::Setting setting;
+            Camera::Setting setting{};
             setting.setting_id = possible_setting;
             get_setting_str(setting.setting_id, setting.setting_description);
             setting.option.option_id = value.get_string();
@@ -1319,7 +1320,7 @@ void CameraImpl::notify_possible_setting_options()
     }
 
     for (auto &possible_setting : possible_settings) {
-        Camera::SettingOptions setting_options;
+        Camera::SettingOptions setting_options{};
         setting_options.setting_id = possible_setting;
         get_setting_str(setting_options.setting_id, setting_options.setting_description);
         get_possible_options(possible_setting, setting_options.options);
@@ -1335,7 +1336,7 @@ void CameraImpl::refresh_params()
         return;
     }
 
-    std::vector<std::string> params{};
+    std::vector<std::pair<std::string, MAVLinkParameters::ParamValue>> params;
     _camera_definition->get_unknown_params(params);
     if (params.size() == 0) {
         // We're assuming that we changed one option and this did not cause
@@ -1347,26 +1348,28 @@ void CameraImpl::refresh_params()
 
     unsigned count = 0;
     for (const auto &param : params) {
-        std::string param_name = param;
+        const std::string &param_name = param.first;
+        const MAVLinkParameters::ParamValue &param_value_type = param.second;
         const bool is_last = (count + 1 == params.size());
-        _parent->get_param_async(
-            param_name,
-            [param_name, is_last, this](bool success, MAVLinkParameters::ParamValue value) {
-                if (!success) {
-                    return;
-                }
-                // We need to check again by the time this callback runs
-                if (!this->_camera_definition) {
-                    return;
-                }
-                this->_camera_definition->set_setting(param_name, value);
+        _parent->get_param_async(param_name,
+                                 param_value_type,
+                                 [param_name, is_last, this](MAVLinkParameters::Result result,
+                                                             MAVLinkParameters::ParamValue value) {
+                                     if (result != MAVLinkParameters::Result::SUCCESS) {
+                                         return;
+                                     }
+                                     // We need to check again by the time this callback runs
+                                     if (!this->_camera_definition) {
+                                         return;
+                                     }
+                                     this->_camera_definition->set_setting(param_name, value);
 
-                if (is_last) {
-                    notify_current_settings();
-                    notify_possible_setting_options();
-                }
-            },
-            true);
+                                     if (is_last) {
+                                         notify_current_settings();
+                                         notify_possible_setting_options();
+                                     }
+                                 },
+                                 true);
         ++count;
     }
 }
